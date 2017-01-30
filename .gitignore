@@ -1,0 +1,7 @@
+__pycache__
+*pyc
+*yaml
+venv
+.git
+*ui
+*test*
