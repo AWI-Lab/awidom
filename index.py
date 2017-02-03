@@ -14,6 +14,8 @@ import sys
 import threading
 import yaml
 
+
+# Configuration globals
 CLIENTFILE__ = 'clients.yaml'
 OTREE_EXEC__ = 'chrome.exe'
 ORG__ = 'Alfred-Weber-Institut für Wirtschaftwissenschaften'
@@ -49,6 +51,14 @@ class Ternary(Enum):
     UNKNOWN = 2
 
 
+# Runtime globals
+class ICONS(object):
+    # TODO(d1): docstring
+    ON = 0
+    OFF = 0
+    UNKOWN = 0
+
+
 class AWIDom(QtGui.QApplication):
     """Handles the whole program."""
 
@@ -62,9 +72,11 @@ class AWIDom(QtGui.QApplication):
         super().__init__(sys.argv)
         self.setOrganizationName(ORG__)
         self.setApplicationName(NAME__)
-        self.left = PCList('Linke Seite')
-        self.right = PCList('Rechte Seite')
+        self.settings = QtCore.QSettings()
+        self.left = PCList('Left side')
+        self.right = PCList('Right side')
         self.otree_uri = ''
+        self.loadIcons()
         self.loadConfig(cfile)
         self.createWindow()
 
@@ -93,8 +105,17 @@ class AWIDom(QtGui.QApplication):
             target (PCList): A PCList to append the new PCs to.
             confs (list): A list of PCs in dict form
         """
-        return [target.append(PC(c['id'], c['name'], c['ip'], c['mac'])),
+        return [target.append(PC(c['id'], c['name'], c['ip'], c['mac']))
                 for c in confs]
+
+    def loadIcons(self):
+        # TODO(d1): docstring
+        pixmap_on = QtGui.QPixmap('./assets/font_awesome_toggle_on.png')
+        pixmap_off = QtGui.QPixmap('./assets/font_awesome_toggle_off.png')
+        pixmap_question = QtGui.QPixmap('./assets/font_awesome_question.png')
+        ICONS.ON = QtGui.QIcon(pixmap_on)
+        ICONS.OFF = QtGui.QIcon(pixmap_off)
+        ICONS.QUESTION = QtGui.QIcon(pixmap_question)
 
     def createWindow(self):
         """Creates the window for the application without showing/displaying it.
@@ -126,9 +147,8 @@ class PC(QtGui.QCheckBox):
         self.name = name
         self.ip = ip
         self.setMac(mac)
-        self.online = Ternary(Ternary.UNKNOWN)
+        self.setOnline(Ternary.UNKNOWN)
         self.isPinging = False
-        self.loadIcons()
 
     def __lt__(self, other):
         """Less then comparison operator
@@ -149,16 +169,8 @@ class PC(QtGui.QCheckBox):
         return ('PC: [id: {}, name: {}, ip: {}, mac: {}]'
                 ''.format(self.id, self.name, self.ip, self.mac))
 
-    def loadIcons(self):
+    def setMac(self, mac):
         # TODO(d1): docstring
-        pixmap_on = QtGui.QPixmap('./assets/font_awesome_toggle_on.png')
-        pixmap_off = QtGui.QPixmap('./assets/font_awesome_toggle_off.png')
-        pixmap_question = QtGui.QPixmap('./assets/font_awesome_question.png')
-        self._icon_on = QtGui.QIcon(pixmap_on)
-        self._icon_off = QtGui.QIcon(pixmap_off)
-        self._icon_question = QtGui.QIcon(pixmap_question)
-
-    def setMac(mac):
         if len(mac) == 12:
             pass
         elif len(mac) == 12 + 5:
@@ -170,17 +182,17 @@ class PC(QtGui.QCheckBox):
 
     def setOnline(self, status):
         # TODO(d1): docstring
-        self.online = status
+        self.online = Ternary(status)
         self.setOnlineIcon()
 
     def setOnlineIcon(self):
         # TODO(d1): docstring
         if self.online == Ternary.ON:
-            self.setIcon(self._icon_on)
+            self.setIcon(ICONS.ON)
         elif self.online == Ternary.OFF:
-            self.setIcon(self._icon_off)
+            self.setIcon(ICONS.OFF)
         else:
-            self.setIcon(self._icon_question)
+            self.setIcon(ICONS.QUESTION)
         self.setIconSize(QtCore.QSize(16, 16))
 
     def _ping(self):
@@ -253,17 +265,12 @@ class PCList(QtGui.QGroupBox):
         """
         super().__init__(title)
         self.layout = QtGui.QVBoxLayout()
-        self.setSelectAllButton()
         if pc_list is not None:
             self.load(pc_list)
 
     def __iter__(self):
+        # TODO(d1): docstring
         return iter(self.children())
-
-    def setSelectAllButton(self):
-        self.selectall = QtGui.QPushButton('Select all')
-        self.selectall.clicked.connect(self.selectAll)
-        self.append(self.selectall)
 
     def load(self, pc_list):
         """Append all PCs in a list to this PCList.
@@ -273,22 +280,19 @@ class PCList(QtGui.QGroupBox):
         """
         return [self.append(pc) for pc in pc_list]
 
-    def append(self, item):
-        """Append a single item to the List:
+    def append(self, pc):
+        """Append a single pc to the List:
 
         Args:
-            item (QWidget): The item.
+            pc (PC): The pc.
         """
-        self.layout.addWidget(item)
-        if isinstance(item, PC):
-            item.ping()
-            self.layout.removeWidget(self.selectall)
-            self.layout.addWidget(self.selectall)
+        self.layout.addWidget(pc)
+        pc.ping()
         self.setLayout(self.layout)
 
     def selectAll(self):
         # TODO(d1): docstring
-        return [i.setChecked() for i in self if isinstance(i, PC)]
+        return [i.setChecked(True) for i in self if isinstance(i, PC)]
 
     def wake(self):
         # TODO(d1): docstring
@@ -300,7 +304,7 @@ class PCList(QtGui.QGroupBox):
 
     def ping(self):
         # TODO(d1): docstring
-        return [i.ping() for i in self if isinstance(i, PC)]
+        return [i.ping() for i in self if isinstance(i, PC) and i.isChecked()]
 
 
 class PCListsWidget(QtGui.QWidget):
@@ -309,12 +313,24 @@ class PCListsWidget(QtGui.QWidget):
     def __init__(self):
         """Construct a new PCListsWidget."""
         super().__init__()
-        self.layout = QtGui.QHBoxLayout()
-        self.setLayout(self.layout)
+        self.createLayout()
 
     def __iter__(self):
         # TODO(d1): docstring
         return iter(self.children())
+
+    def createLayout(self):
+        # TODO(d1): docstring
+        self.layout = QtGui.QVBoxLayout()
+        self.listsLayout = QtGui.QHBoxLayout()
+        self.controlsLayout = QtGui.QHBoxLayout()
+        self.lists = QtGui.QWidget()
+        self.controls = QtGui.QWidget()
+        self.lists.setLayout(self.listsLayout)
+        self.controls.setLayout(self.controlsLayout)
+        self.layout.addWidget(self.lists)
+        self.layout.addWidget(self.controls)
+        self.setLayout(self.layout)
 
     def addList(self, pclist):
         """Add a new PCList to the widget.
@@ -322,8 +338,12 @@ class PCListsWidget(QtGui.QWidget):
         Args:
             pclist (PCList): The new list
         """
-        self.layout.addWidget(pclist)
-        self.setLayout(self.layout)
+        selectAllButton = QtGui.QPushButton('Select all')
+        selectAllButton.clicked.connect(pclist.selectAll)
+        self.listsLayout.addWidget(pclist)
+        self.controlsLayout.addWidget(selectAllButton)
+        self.lists.setLayout(self.listsLayout)
+        self.controls.setLayout(self.controlsLayout)
 
 
 class MainWindow(QtGui.QMainWindow):
@@ -348,21 +368,23 @@ class MainWindow(QtGui.QMainWindow):
         # TODO(d1): docstring
         controlwidget = QtGui.QWidget()
         controllayout = QtGui.QGridLayout()
-        controllayout.addWidget(self.pingButton(), 0, 0)
-        controllayout.addWidget(self.wakeButton(), 0, 1)
-        controllayout.addWidget(self.oTreeButton(), 0, 2)
-        controllayout.addWidget(self.selectButton(), 1, 0)
+        controllayout.addWidget(self._button('Ping',
+                                             self.ping), 0, 0)
+        controllayout.addWidget(self._button('Wake up',
+                                             self.wake), 0, 1)
+        controllayout.addWidget(self._button('oTree',
+                                             self.startOTree), 0, 2)
+        controllayout.addWidget(self._button('Select executeable',
+                                             self.commandSelector), 1, 0)
         controllayout.addWidget(self.execButton(), 1, 1)
         controlwidget.setLayout(controllayout)
         return controlwidget
 
     def _button(self, name, func):
+        # TODO(d1): docstring
         button = QtGui.QPushButton(name)
         button.clicked.connect(func)
         return button
-
-    def pingButton(self):
-        return self._button('Ping', self.ping)
 
     def execButton(self):
         # TODO(d1): docstring
@@ -370,19 +392,8 @@ class MainWindow(QtGui.QMainWindow):
                             partial(self.execCommand,
                                     command=self.executeable))
 
-    def selectButton(self):
-        # TODO(d1): docstring
-        return self._button('Select executeable', self.commandSelector)
-
-    def wakeButton(self):
-        # TODO(d1): docstring
-        return self._button('Wake up', self.wake)
-
-    def oTreeButton(self):
-        # TODO(d1): docstring
-        return self._button('oTree', self.startOTree)
-
     def ping(self):
+        # TODO(d1): docstring
         return [i.ping() for i in self.pclistswidget if isinstance(i, PCList)]
 
     def execCommand(self, command):
