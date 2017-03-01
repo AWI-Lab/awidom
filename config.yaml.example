@@ -1,0 +1,18 @@
+
+# The name of this application
+app_name:       'AWIDominator'
+
+# The name of your organisation
+organisation:   ''
+
+# The path to the configuration file containing the clients
+client_file:    'clients.yaml'
+
+# The command to execute otree
+otree_command:  'chrome.exe'
+
+# The broadcast IP for your network
+broadcast_ip:   '255.255.255.255'
+
+# The root path for your network drive
+root_path:      ''
