@@ -30,7 +30,6 @@ NETWORK_DRIVE__ = '\\\\ad.uni-heidelberg.de\\wiso\\awi.lab'
 
 
 def sendWarning(text):
-    # TODO(d1): docstring
     warnBox = QtGui.QMessageBox()
     warnBox.setWindowTitle('Warnung!')
     warnBox.setText(text)
@@ -39,7 +38,6 @@ def sendWarning(text):
 
 
 def sendBooleanQuery(text):
-    # TODO(d1): docstring
     questionBox = QtGui.QMessageBox()
     questionBox.setWindowTitle('Achtung!')
     questionBox.setText(text)
@@ -50,7 +48,6 @@ def sendBooleanQuery(text):
 
 
 class Ternary(Enum):
-    # TODO(d1): docstring
     OFF = 0
     ON = 1
     UNKNOWN = 2
@@ -58,7 +55,6 @@ class Ternary(Enum):
 
 # Runtime globals
 class ICONS(object):
-    # TODO(d1): docstring
     ON = 0
     OFF = 0
     UNKOWN = 0
@@ -78,9 +74,10 @@ class AWIDom(QtGui.QApplication):
         self.setOrganizationName(ORG__)
         self.setApplicationName(NAME__)
         self.settings = QtCore.QSettings()
-        self.left = PCList('Left side')
-        self.right = PCList('Right side')
+        self.left = PCList('Left side', self.execute)
+        self.right = PCList('Right side', self.execute)
         self.otree_uri = ''
+        self.executions = {}
         self.loadIcons()
         self.loadConfig(cfile)
         self.createWindow()
@@ -110,11 +107,11 @@ class AWIDom(QtGui.QApplication):
             target (PCList): A PCList to append the new PCs to.
             confs (list): A list of PCs in dict form
         """
-        return [target.append(PC(c['id'], c['name'], c['ip'], c['mac']))
+        return [target.append(PC(c['id'], c['name'], c['ip'], c['mac'],
+                                 self.execute))
                 for c in confs]
 
     def loadIcons(self):
-        # TODO(d1): docstring
         pixmap_on = QtGui.QPixmap('./assets/font_awesome_toggle_on.png')
         pixmap_off = QtGui.QPixmap('./assets/font_awesome_toggle_off.png')
         pixmap_question = QtGui.QPixmap('./assets/font_awesome_question.png')
@@ -129,6 +126,29 @@ class AWIDom(QtGui.QApplication):
         self.mainwindow.createLayout()
         self.mainwindow.pclistswidget.addList(self.left)
         self.mainwindow.pclistswidget.addList(self.right)
+
+    def execute(clients, commands, wait=False):
+        '''Adds a command to the execution waiting list.
+
+        Args:
+            clients (list(str)): The list of clients to add the command for.
+            commands (str, list): The command or list of commands to add
+            wait (bool, optional): Whether to wait with execution until further
+                notice.
+        '''
+        if not isinstance(commands, list):
+            commands = list(commands)
+        for client in clients:
+            if client in self.executions:
+                self.executions[client].extend(commands)
+            else:
+                self.executions[client] = commands
+        if not wait:
+            self.flushExecutions()
+
+    def flushExecutions():
+        '''Will save all pending executions to the file so they can be run.'''
+        pass
 
     def run(self):
         """Showing the constructed window to the user."""
@@ -175,7 +195,6 @@ class PC(QtGui.QCheckBox):
                 ''.format(self.id, self.name, self.ip, self.mac))
 
     def setMac(self, mac):
-        # TODO(d1): docstring
         if len(mac) == 12:
             pass
         elif len(mac) == 12 + 5:
@@ -186,12 +205,10 @@ class PC(QtGui.QCheckBox):
         self.mac = mac
 
     def setOnline(self, status):
-        # TODO(d1): docstring
         self.online = Ternary(status)
         self.setOnlineIcon()
 
     def setOnlineIcon(self):
-        # TODO(d1): docstring
         if self.online == Ternary.ON:
             self.setIcon(ICONS.ON)
         elif self.online == Ternary.OFF:
@@ -218,13 +235,11 @@ class PC(QtGui.QCheckBox):
         return isOnline
 
     def ping(self):
-        # TODO(d1): docstring
         if not self.isPinging:
             ping_thread = threading.Thread(target=self._ping)
             ping_thread.start()
 
     def _wake(self):
-        # TODO(d1): docstring
         # Pad the synchronization stream.
         print('Sending magic packet to {}'.format(self.name))
         data = ''.join(['FFFFFFFFFFFF', self.mac * 20])
@@ -242,7 +257,6 @@ class PC(QtGui.QCheckBox):
         return True
 
     def wake(self):
-        # TODO(d1): docstring
         if not self.isChecked():
             return True
         if self.online != Ternary.ON:
@@ -252,53 +266,26 @@ class PC(QtGui.QCheckBox):
         else:
             sendWarning('{} is already alive.'.format(self.name))
 
-    def _execCommand(self, command, interactive=True):
-        # TODO(d1): docstring
-        print('Executing {} on {}'.format(command, self.name))
-        user = '{}\\Administrator'.format(self.name)
-        psexec_params = '-u {} -p {} \\\\{}'.format(user,
-                                                    ADMIN_PASSWORD__,
-                                                    self.name)
-        if interactive:
-            psexec_params += ' -i 1'
-        else:
-            psexec_params += ' '
-        print('{} {} {}'.format(PSEXEC__, psexec_params, command))
-        os.system('{} {} {}'.format(PSEXEC__, psexec_params, command))
-
-    def execCommand(self, command, interactive=True):
-        # TODO(d1): docstring
-        if not self.isChecked():
-            return True
-        if self.online == Ternary.ON:
-            self.setChecked(False)
-            exec_thread = threading.Thread(target=partial(self._execCommand, command=command, interactive=interactive))
-            exec_thread.setDaemon(True)
-            exec_thread.start()
-        else:
-            sendWarning('{} is not alive.'.format(self.name))
-
-    def shutdown(self):
-        self.execCommand('shutdown.exe "-s -f -t 0"', False)
-
 
 class PCList(QtGui.QGroupBox):
     """A List of Buttons/Models of PCs, used to display as a list."""
 
-    def __init__(self, title, pc_list=None):
+    def __init__(self, title, executer, pc_list=None):
         """Consturcts a new PCList.
 
         Args:
             title (str): The Title for the list, will be shown.
+            executer (function): The function to add command executions for a
+                list of client PCs
             pc_list (list, optional): The List of PCs added to the object.
         """
         super().__init__(title)
         self.layout = QtGui.QVBoxLayout()
+        self.executer = executer
         if pc_list is not None:
             self.load(pc_list)
 
     def __iter__(self):
-        # TODO(d1): docstring
         return iter(self.children())
 
     def load(self, pc_list):
@@ -320,24 +307,17 @@ class PCList(QtGui.QGroupBox):
         self.setLayout(self.layout)
 
     def selectAll(self):
-        # TODO(d1): docstring
         return [i.setChecked(True) for i in self if isinstance(i, PC)]
 
     def wake(self):
-        # TODO(d1): docstring
         return [i.wake() for i in self if isinstance(i, PC)]
 
-    def shutdown(self):
-        # TODO(d1): docstring
-        return [i.shutdown() for i in self if isinstance(i, PC)]
-
-    def execCommand(self, command):
-        # TODO(d1): docstring
-        return [i.execCommand(command) for i in self if isinstance(i, PC)]
+    def execute(self, command, wait=False):
+        clients = [pc for pc in self if isinstance(pc, PC) and pc.isChecked()]
+        self.executer(clients, command, wait)
 
     def ping(self):
-        # TODO(d1): docstring
-        return [i.ping() for i in self if isinstance(i, PC) and i.isChecked()]
+        [i.ping() for i in self if isinstance(i, PC) and i.isChecked()]
 
 
 class PCListsWidget(QtGui.QWidget):
@@ -349,11 +329,9 @@ class PCListsWidget(QtGui.QWidget):
         self.createLayout()
 
     def __iter__(self):
-        # TODO(d1): docstring
         return iter(self.lists.children())
 
     def createLayout(self):
-        # TODO(d1): docstring
         self.layout = QtGui.QVBoxLayout()
         self.listsLayout = QtGui.QHBoxLayout()
         self.controlsLayout = QtGui.QHBoxLayout()
@@ -380,7 +358,6 @@ class PCListsWidget(QtGui.QWidget):
 
 
 class MainWindow(QtGui.QMainWindow):
-    # TODO(d1): docstring
     def __init__(self):
         """Construct a new MainWindow"""
         super().__init__()
@@ -388,7 +365,6 @@ class MainWindow(QtGui.QMainWindow):
         self.executeable = ('','')
 
     def createLayout(self):
-        # TODO(d1): docstring
         self.cwidget = QtGui.QWidget()
         self.clayout = QtGui.QVBoxLayout()
         self.setCentralWidget(self.cwidget)
@@ -398,7 +374,6 @@ class MainWindow(QtGui.QMainWindow):
         self.cwidget.setLayout(self.clayout)
 
     def createControls(self):
-        # TODO(d1): docstring
         controlwidget = QtGui.QWidget()
         controllayout = QtGui.QGridLayout()
         controllayout.addWidget(self._button('Ping',
@@ -410,38 +385,33 @@ class MainWindow(QtGui.QMainWindow):
         controllayout.addWidget(self._button('Select executeable',
                                              self.commandSelector), 1, 0)
         controllayout.addWidget(self._button('Execute',
-                                             self.execCommand), 1, 1)
+                                             self.execute), 1, 1)
         controllayout.addWidget(self._button('oTree',
                                              self.startOTree), 1, 2)
         controlwidget.setLayout(controllayout)
         return controlwidget
 
     def _button(self, name, func):
-        # TODO(d1): docstring
         button = QtGui.QPushButton(name)
         button.clicked.connect(func)
         return button
 
     def ping(self):
-        # TODO(d1): docstring
         return [i.ping() for i in self.pclistswidget if isinstance(i, PCList)]
 
-    def execCommand(self):
-        # TODO(d1): docstring
-        return [i.execCommand(self.executeable) for i in self.pclistswidget
+    def execute(self, executeable=None):
+        if executeable is None:
+            executeable = self.executeable
+        return [i.execute(executeable) for i in self.pclistswidget
                 if isinstance(i, PCList)]
 
     def wake(self):
-        # TODO(d1): docstring
         return [i.wake() for i in self.pclistswidget if isinstance(i, PCList)]
 
     def shutdown(self):
-        # TODO(d1): docstring
-        return [i.shutdown() for i in self.pclistswidget
-                if isinstance(i, PCList)]
+        self.execute('shutdown-command')
 
     def commandSelector(self):
-        # TODO(d1): docstring
         e = QtGui.QFileDialog.getOpenFileName(self, 'Find the executeable',
                                                     NETWORK_DRIVE__,
                                                     '')[0]
@@ -450,13 +420,11 @@ class MainWindow(QtGui.QMainWindow):
         self.executeable = e
 
     def startOTree(self):
-        # TODO(d1): docstring
         sendWarning('Not implemented yet!')
-        # return [i.execCommand(self.OTREE_EXEC__) for i in self.pclistswidget
+        # return [i.execute(self.OTREE_EXEC__) for i in self.pclistswidget
                 # if isinstance(i, PCList)]
 
     def about(self):
-        # TODO(d1): docstring
         QtGui.QMessageBox.about(self, 'AWIDominator', 'HILFEEEE')
 
 
