@@ -13,7 +13,6 @@ import struct
 import socket
 import sys
 import threading
-import watchdog
 
 
 # Runtime globals
