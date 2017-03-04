@@ -8,11 +8,14 @@ organisation:   ''
 # The path to the configuration file containing the clients
 client_file:    'clients.yaml'
 
-# The command to execute otree
-otree_command:  'chrome.exe'
-
 # The broadcast IP for your network
 broadcast_ip:   '255.255.255.255'
 
 # The root path for your network drive
 root_path:      ''
+
+# The uri for oTree
+otree-uri:
+
+# The command to execute otree
+otree_command:  'chrome.exe'

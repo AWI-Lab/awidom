@@ -36,7 +36,6 @@ class AWIDom(QtGui.QApplication):
         super().__init__(sys.argv)
         self.loadConfig(configfile)
         self.settings = QtCore.QSettings()
-        self.otree_uri = ''
         self.executions = {}
         self.loadIcons()
         self.createWindow()
@@ -49,6 +48,7 @@ class AWIDom(QtGui.QApplication):
         CONFIG.BROADCAST_IP = config['broadcast_ip']
         CONFIG.NETWORK_DRIVE = config['root_path']
         CONFIG.OTREE_EXEC = config['otree_command']
+        CONFIG.OTREE_URI = config['otree_uri']
 
     def loadPCs(self, clientfile):
         clientsconf = utils.loadYAML(clientfile)
