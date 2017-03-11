@@ -1,5 +1,5 @@
 from enum import Enum
-from PySide import QtGui
+import PySide.QtGui as QtGui
 import sys
 import yaml
 
@@ -16,7 +16,7 @@ class Ternary(Enum):
     UNKNOWN = 2
 
 
-def loadYAML(self, path):
+def loadYAML(path):
     with open(path, 'r') as f:
         try:
             content = yaml.load(f)

@@ -1,13 +1,9 @@
 import argparse
-import awidom
+import awidom.server
+import sys
 
 
 CONFIGFILE = 'config.yaml'
-
-
-def startClient():
-    sub = awidom.client.AWIClient(CONFIGFILE)
-    sub.run()
 
 
 def startServer():

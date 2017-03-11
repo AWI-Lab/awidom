@@ -19,7 +19,7 @@ import threading
 class ICONS(object):
     ON = 0
     OFF = 0
-    UNKOWN = 0
+    UNKNOWN = 0
 
 
 class AWIDom(QtGui.QApplication):
@@ -33,10 +33,10 @@ class AWIDom(QtGui.QApplication):
             configfile (string, optional): The path to the configuration file.
         """
         super().__init__(sys.argv)
+        self.loadIcons()
         self.loadConfig(configfile)
         self.settings = QtCore.QSettings()
         self.executions = {}
-        self.loadIcons()
         self.createWindow()
 
     def loadConfig(self, configfile):
@@ -53,10 +53,10 @@ class AWIDom(QtGui.QApplication):
         clientsconf = utils.loadYAML(clientfile)
         self.left = PCList('Left side', self.execute)
         self.right = PCList('Right side', self.execute)
-        [self.left.append(PC(c['id'], c['name'], c['ip'], c['mac'],
-                             self.execute)) for c in clientsconf['left']]
-        [self.right.append(PC(c['id'], c['name'], c['ip'], c['mac'],
-                             self.execute)) for c in clientsconf['right']]
+        [self.left.append(PC(c['id'], c['name'], c['ip'], c['mac']))
+            for c in clientsconf['left']]
+        [self.right.append(PC(c['id'], c['name'], c['ip'], c['mac']))
+            for c in clientsconf['right']]
 
     def loadIcons(self):
         pixmap_on = QtGui.QPixmap('./assets/font_awesome_toggle_on.png')
@@ -64,7 +64,7 @@ class AWIDom(QtGui.QApplication):
         pixmap_question = QtGui.QPixmap('./assets/font_awesome_question.png')
         ICONS.ON = QtGui.QIcon(pixmap_on)
         ICONS.OFF = QtGui.QIcon(pixmap_off)
-        ICONS.QUESTION = QtGui.QIcon(pixmap_question)
+        ICONS.UNKNOWN = QtGui.QIcon(pixmap_question)
 
     def createWindow(self):
         """Creates the window for the application without showing/displaying it.
@@ -161,7 +161,7 @@ class PC(QtGui.QCheckBox):
         elif self.online == Ternary.OFF:
             self.setIcon(ICONS.OFF)
         else:
-            self.setIcon(ICONS.QUESTION)
+            self.setIcon(ICONS.UNKNOWN)
         self.setIconSize(QtCore.QSize(16, 16))
 
     def _ping(self):

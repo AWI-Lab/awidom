@@ -5,43 +5,44 @@ function Build-Command-Watcher([String] $Path) {
     Path (String): The path to the command YAML file
   #>
   $Path = Normalize-Path -Path $Path
-  $folder = Split-Path -Path $Path
-  $filename = Split-Path -Path $Path -leaf
-  $Watcher = New-Object IO.FileSystemWatcher $folder, $filename -Property @{
+  $Folder = Split-Path -Path $Path
+  $Filename = Split-Path -Path $Path -leaf
+  $Watcher = New-Object IO.FileSystemWatcher $Folder, $Filename -Property @{
     IncludeSubdirectories = $false
     NotifyFilter = [IO.NotifyFilters]'FileName, LastWrite'
   }
+  $global:CheckCommandFile = $true
   try{
     Unregister-Event CommandFileChanged
   }catch{$false}
-  $onCommandChange = Register-ObjectEvent $Watcher Changed -SourceIdentifier CommandFileChanged -Action {
-    $path = $Event.SourceEventArgs.FullPath
-    $name = $Event.SourceEventArgs.Name
+  Write-Host "Registering onCommandChange"
+  $OnCommandChange = Register-ObjectEvent $Watcher Changed -SourceIdentifier CommandFileChanged -Action {
+    Write-Host "Triggerd onCommandChange"
+    if ($global:CheckCommandFile -eq 1) {
+      Write-Host "is valid"
+      $global:CheckCommandFile = $false
+      $Path = $Event.SourceEventArgs.FullPath
+      $Name = $Event.SourceEventArgs.Name
 
-    # Pause the FileSystemWatcher for 10sec:
-    $watcher.EnableRaisingEvents = $false
-    $EventTimer = New-Object timers.timer
-    $EventTimer.Interval = 10000
-    $action = {
-      $watcher.EnableRaisingEvents = $true
-      Unregister-Event RaisingTimer
+      # Get a new command and execute:
+      $Command = Get-OwnCommand -Path $Path -Attr $env:COMPUTERNAME
+      $Exec, $Args = Split-ArgumentCommandPath -Command $Command
+      if ($Command -ne '') {
+        Write-Host "$Exec with Args: $Args"
+        & $Exec $Args
+      }
+
+      # Pause the FileSystemWatcher for 10sec:
+      Write-Host "Started timer"
+      Start-Sleep -s 1
+      Write-Host "Ended timer"
+      $global:CheckCommandFile = $true
     }
-    Register-ObjectEvent -InputObject $EventTimer -EventName elapsed -SourceIdentifier RaisingTimer -Action $action
-    $EventTimer.Start()
-
-    # Get a new command and execute:
-    $command = Get-Own-Command -Path $path -Attr $env:COMPUTERNAME
-    $exec, $args = Split-Argument-Command-Path -Command $command
-    if ($command -ne '') {
-      Write-Host "$exec with Args: $args"
-      & $exec $args
-    }
-
   }
 }
 
 
-function Split-Argument-Command-Path([String] $Command) {
+function Split-ArgumentCommandPath([String] $Command) {
   <#Fetch the arguments from an command string.
 
   Args:
@@ -50,8 +51,8 @@ function Split-Argument-Command-Path([String] $Command) {
   Returns:
     the retrieved arguments
   #>
-  $regex = "(.*?)( [-|\].*|$)"
-  $matched = $Command -match $regex
+  $RegEx = "(.*?)( [-|\\].*|$)"
+  $matched = $Command -match $RegEx
   return $matches[1].Trim().Split(), $matches[2].Trim().Split()
 }
 
@@ -73,7 +74,7 @@ function Normalize-Path([String] $Path) {
 }
 
 
-function Get-From-YAML([String] $Text, [String] $Attr) {
+function Get-FromYAML($Text, [String] $Attr) {
   <#Get a value for a key in an YAML text.
 
   Args:
@@ -83,8 +84,9 @@ function Get-From-YAML([String] $Text, [String] $Attr) {
   Returns:
     the value or ''
   #>
-  $line = $Text | Select-String -Pattern ($Attr)
-  if ($line -match ".*'(?<content>.*)'.*" -eq 1) {
+  $Line = $Text | Select-String -Pattern ($Attr)
+  Write-Host $Line
+  if ($Line -match ".*'(?<content>.*)'.*" -eq 1) {
     return $matches['content']
   }else{
     return ''
@@ -92,7 +94,7 @@ function Get-From-YAML([String] $Text, [String] $Attr) {
 }
 
 
-function Get-Own-Command([String] $Path, [String] $Attr) {
+function Get-OwnCommand([String] $Path, [String] $Attr) {
   <#Get the new command from YAML file and delete it
 
   Args:
@@ -103,21 +105,22 @@ function Get-Own-Command([String] $Path, [String] $Attr) {
     the new command or ''
   #>
   $Path = Normalize-Path -Path $Path
-  $content = Get-Content $Path
-  $command = Get-From-YAML -Text $content -Attr $Attr
+  $Content = Get-Content $Path
+  $Command = Get-FromYAML -Text $Content -Attr $Attr
 
-  if ($command -eq '') {
+  if ($Command -eq '') {
     return ''
   }
 
   while ($true) {
     try{
-      $file = [System.io.File]::Open($Path, 'Open', 'Write', 'Read')
-      $newcontent = Get-Content $Path | Where-Object {$_ -notmatch $Attr}
-      $writer = New-Object System.IO.StreamWriter($file)
-      $writer.Write(($newcontent -join "`r`n"))
-      $writer.Close()
-      $file.Close()
+      $File = New-Object IO.FileStream($Path, 'Truncate', 'Write', 'None')
+      $NewContent = $Content | Where-Object {$_ -notmatch $Attr}
+      $NewContent = ($NewContent -join "`r`n")
+      $Writer = New-Object System.IO.StreamWriter($File)
+      $Writer.Write($NewContent)
+      $Writer.Dispose()
+      $File.Dispose()
       break
     }
     catch{
@@ -125,5 +128,5 @@ function Get-Own-Command([String] $Path, [String] $Attr) {
     }
   }
 
-  return $command
+  return $Command
 }
